@@ -2,7 +2,7 @@ MVP Zero-Fila
 ===============
 ## INTEGRATES
 - Pumachoque Choquenaira Jhon Esau - 210940
-- 
+- Guevara Delgado Tirssa Ivonne - 192420
 - 
 
 ## HIPOSTESIS
