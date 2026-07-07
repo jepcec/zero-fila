@@ -12,6 +12,8 @@ export interface Entity {
   id: string;
   name: string;
   type: string;
+  region: string;
+  city: string;
   peopleWaiting: number;
   estimatedWaitMinutes: number;
   lastUpdatedAt: string;
