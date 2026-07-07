@@ -1,190 +1,141 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { BottomNav } from "@/components/BottomNav";
+import { EntityCard } from "@/components/EntityCard";
+import { Header } from "@/components/Header";
+import { LiveIndicator } from "@/components/LiveIndicator";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { fetchEntities } from "@/lib/api";
+import type { Entity } from "@/lib/types";
 
-interface Entity {
-  id: string;
-  name: string;
-  type: string;
-  peopleWaiting: number;
-  estimatedWaitMinutes: number;
-  lastUpdatedMinutesAgo: number;
-}
-
-const MOCK_DATA: Entity[] = [
-  {
-    id: "1",
-    name: "Banco de la Nacion",
-    type: "Entidad Bancaria",
-    peopleWaiting: 23,
-    estimatedWaitMinutes: 45,
-    lastUpdatedMinutesAgo: 2,
-  },
-  {
-    id: "2",
-    name: "Hospital Regional",
-    type: "Salud",
-    peopleWaiting: 8,
-    estimatedWaitMinutes: 20,
-    lastUpdatedMinutesAgo: 5,
-  },
-  {
-    id: "3",
-    name: "Municipalidad Provincial",
-    type: "Tramites",
-    peopleWaiting: 4,
-    estimatedWaitMinutes: 10,
-    lastUpdatedMinutesAgo: 1,
-  },
-  {
-    id: "4",
-    name: "Registro Civil",
-    type: "Tramites",
-    peopleWaiting: 15,
-    estimatedWaitMinutes: 30,
-    lastUpdatedMinutesAgo: 3,
-  },
-];
-
-type QueueLevel = "low" | "medium" | "high";
-
-function getQueueLevel(people: number): QueueLevel {
-  if (people <= 5) return "low";
-  if (people <= 15) return "medium";
-  return "high";
-}
-
-const levelConfig: Record<QueueLevel, { label: string; bar: string; text: string }> = {
-  low: { label: "Poca espera", bar: "bg-emerald-500", text: "text-emerald-600" },
-  medium: { label: "Espera moderada", bar: "bg-amber-500", text: "text-amber-600" },
-  high: { label: "Mucha espera", bar: "bg-red-500", text: "text-red-600" },
-};
-
-function shuffleTimes(data: Entity[]): Entity[] {
-  const minutes = [1, 2, 3, 4, 5, 2, 3, 1, 4, 6];
-  return data.map((e, i) => ({
-    ...e,
-    lastUpdatedMinutesAgo: minutes[i % minutes.length],
-    peopleWaiting: Math.max(0, e.peopleWaiting + (Math.random() > 0.5 ? 1 : -1) * Math.floor(Math.random() * 3)),
-  }));
-}
+const REFRESH_MS = 60_000;
 
 export default function Home() {
-  const [entities, setEntities] = useState<Entity[]>(MOCK_DATA);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [error, setError] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  const handleRefresh = useCallback(() => {
+  useEffect(() => {
+    let cancelled = false;
+    const silent = async () => {
+      try {
+        const data = await fetchEntities();
+        if (cancelled) return;
+        setEntities(data);
+        setLastSync(new Date());
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Error desconocido");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    silent();
+    const id = setInterval(silent, REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setEntities(shuffleTimes(entities));
-      setLastRefresh(new Date());
+    setError(null);
+    try {
+      const data = await fetchEntities();
+      setEntities(data);
+      setLastSync(new Date());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error desconocido");
+    } finally {
       setRefreshing(false);
-    }, 600);
-  }, [entities]);
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Zero Fila
-            </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Estado de colas en tiempo real
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            </span>
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              En vivo
-            </span>
-          </div>
+    <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+      <Header />
+      <div className="flex items-center justify-between px-5 pt-4">
+        <div>
+          <h1 className="text-lg font-bold tracking-tight text-slate-900">Colas cerca de ti</h1>
+          <p className="text-xs text-slate-500">Estado en tiempo real</p>
         </div>
-      </header>
-
-      <div className="flex-1 space-y-3 px-4 py-4">
-        {entities.map((entity) => {
-          const level = getQueueLevel(entity.peopleWaiting);
-          const config = levelConfig[level];
-
-          return (
-            <Link
-              key={entity.id}
-              href={`/entidad/${entity.id}`}
-              className="block overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <div className="flex">
-                <div className={`w-1.5 flex-shrink-0 ${config.bar}`} />
-
-                <div className="flex flex-1 flex-col gap-2 p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                        {entity.name}
-                      </h2>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {entity.type}
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="text-lg font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
-                        {entity.peopleWaiting}
-                      </p>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        en espera
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-medium ${config.text}`}>
-                      {config.label} (~{entity.estimatedWaitMinutes} min)
-                    </span>
-                    <span className="text-xs text-zinc-400 dark:text-zinc-500">
-                      Actualizado hace {entity.lastUpdatedMinutesAgo} min
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+        <LiveIndicator />
       </div>
 
-      <footer className="sticky bottom-0 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex-1 space-y-2.5 px-5 py-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="mt-2 h-3 w-1/3" />
+              <div className="mt-3 flex justify-between">
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-8 w-12" />
+              </div>
+            </div>
+          ))
+        ) : error ? (
+          <EmptyState
+            title="No pudimos cargar las colas"
+            description={error}
+            action={
+              <Button size="sm" onClick={handleRefresh}>
+                Reintentar
+              </Button>
+            }
+          />
+        ) : entities.length === 0 ? (
+          <EmptyState
+            title="Aún no hay entidades"
+            description="Cuando se registren entidades, aparecerán aquí."
+          />
+        ) : (
+          entities.map((e) => <EntityCard key={e.id} entity={e} />)
+        )}
+      </div>
+
+      <div className="border-t border-slate-100 bg-white px-5 py-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-zinc-400 dark:text-zinc-500">
-            Ult. actualizacion: {lastRefresh.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}
+          <p className="text-[11px] text-slate-400">
+            {lastSync
+              ? `Sincronizado ${lastSync.toLocaleTimeString("es-PE", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : "Sincronizando…"}
           </p>
-          <button
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            <svg
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"
-              />
-            </svg>
-            {refreshing ? "Actualizando..." : "Actualizar"}
-          </button>
+            <RefreshIcon className={refreshing ? "animate-spin" : ""} />
+            {refreshing ? "Actualizando" : "Actualizar"}
+          </Button>
         </div>
-      </footer>
+      </div>
+
+      <BottomNav />
     </div>
+  );
+}
+
+function RefreshIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={["h-4 w-4", className].join(" ")} stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"
+      />
+    </svg>
   );
 }
