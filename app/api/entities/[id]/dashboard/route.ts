@@ -57,6 +57,8 @@ export async function GET(
     id: seed.id,
     name: seed.name,
     type: seed.type,
+    region: seed.region,
+    city: seed.city,
     peopleWaiting,
     estimatedWaitMinutes,
     lastUpdatedAt: new Date().toISOString(),

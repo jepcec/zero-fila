@@ -1,14 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
+import { CategoryChips } from "@/components/CategoryChips";
 import { EntityCard } from "@/components/EntityCard";
 import { Header } from "@/components/Header";
 import { LiveIndicator } from "@/components/LiveIndicator";
+import { SearchBar } from "@/components/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { fetchEntities } from "@/lib/api";
+import {
+  ALL,
+  filterEntities,
+  uniqueCitiesInRegion,
+  uniqueRegions,
+  uniqueTypes,
+} from "@/lib/search";
 import type { Entity } from "@/lib/types";
 
 const REFRESH_MS = 60_000;
@@ -19,6 +28,11 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+
+  const [query, setQuery] = useState("");
+  const [activeType, setActiveType] = useState<string>(ALL);
+  const [activeRegion, setActiveRegion] = useState<string>(ALL);
+  const [activeCity, setActiveCity] = useState<string>(ALL);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +72,37 @@ export default function Home() {
     }
   };
 
+  const types = useMemo(() => uniqueTypes(entities), [entities]);
+  const regions = useMemo(() => uniqueRegions(entities), [entities]);
+  const cities = useMemo(
+    () => uniqueCitiesInRegion(entities, activeRegion),
+    [entities, activeRegion]
+  );
+  const filtered = useMemo(
+    () => filterEntities(entities, query, activeType, activeRegion, activeCity),
+    [entities, query, activeType, activeRegion, activeCity]
+  );
+
+  const hasFilter =
+    query.trim().length > 0 ||
+    activeType !== ALL ||
+    activeRegion !== ALL ||
+    activeCity !== ALL;
+
+  const clearAll = () => {
+    setQuery("");
+    setActiveType(ALL);
+    setActiveRegion(ALL);
+    setActiveCity(ALL);
+  };
+
+  const filterDescription = buildFilterDescription({
+    query,
+    activeType,
+    activeRegion,
+    activeCity,
+  });
+
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
       <Header />
@@ -68,6 +113,37 @@ export default function Home() {
         </div>
         <LiveIndicator />
       </div>
+
+      {!loading && entities.length > 0 && (
+        <>
+          <SearchBar value={query} onChange={setQuery} />
+          <div className="space-y-2 pt-3">
+            <CategoryChips
+              label="Tipo"
+              types={types}
+              active={activeType}
+              onChange={setActiveType}
+            />
+            <CategoryChips
+              label="Región"
+              types={regions}
+              active={activeRegion}
+              onChange={(r) => {
+                setActiveRegion(r);
+                setActiveCity(ALL);
+              }}
+            />
+            {activeRegion !== ALL && (
+              <CategoryChips
+                label="Ciudad"
+                types={cities}
+                active={activeCity}
+                onChange={setActiveCity}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       <div className="flex-1 space-y-2.5 px-5 py-4">
         {loading ? (
@@ -97,7 +173,37 @@ export default function Home() {
             description="Cuando se registren entidades, aparecerán aquí."
           />
         ) : (
-          entities.map((e) => <EntityCard key={e.id} entity={e} />)
+          <>
+            {hasFilter && (
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[11px] font-semibold text-slate-500">
+                  Mostrando {filtered.length} de {entities.length}
+                </p>
+                {hasFilter && (
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="text-[11px] font-semibold text-indigo-600 hover:underline"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            )}
+            {filtered.length === 0 ? (
+              <EmptyState
+                title="Sin coincidencias"
+                description={`No encontramos entidades${filterDescription}.`}
+                action={
+                  <Button size="sm" variant="secondary" onClick={clearAll}>
+                    Limpiar búsqueda
+                  </Button>
+                }
+              />
+            ) : (
+              filtered.map((e) => <EntityCard key={e.id} entity={e} />)
+            )}
+          </>
         )}
       </div>
 
@@ -126,6 +232,28 @@ export default function Home() {
       <BottomNav />
     </div>
   );
+}
+
+function buildFilterDescription({
+  query,
+  activeType,
+  activeRegion,
+  activeCity,
+}: {
+  query: string;
+  activeType: string;
+  activeRegion: string;
+  activeCity: string;
+}): string {
+  const parts: string[] = [];
+  if (query.trim()) parts.push(`"${query.trim()}"`);
+  if (activeType !== ALL) parts.push(activeType.toLowerCase());
+  if (activeRegion !== ALL) parts.push(activeRegion);
+  if (activeCity !== ALL) parts.push(activeCity);
+  if (parts.length === 0) return "";
+  return parts.length === 1 && query.trim()
+    ? ` para ${parts[0]}`
+    : ` para ${parts.join(" · ")}`;
 }
 
 function RefreshIcon({ className = "" }: { className?: string }) {

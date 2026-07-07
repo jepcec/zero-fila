@@ -13,6 +13,8 @@ export async function GET() {
       id: e.id,
       name: e.name,
       type: e.type,
+      region: e.region,
+      city: e.city,
       peopleWaiting,
       estimatedWaitMinutes,
       lastUpdatedAt: new Date().toISOString(),

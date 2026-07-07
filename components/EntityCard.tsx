@@ -19,6 +19,29 @@ export function EntityCard({ entity }: EntityCardProps) {
         <div className="flex-1 min-w-0">
           <h2 className="truncate text-[15px] font-bold text-slate-900">{entity.name}</h2>
           <p className="mt-0.5 text-xs text-slate-500">{entity.type}</p>
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className="h-3 w-3 flex-shrink-0"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.244-4.243a8 8 0 1111.314 0z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+            <span className="truncate">
+              {entity.city} · {entity.region}
+            </span>
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <Badge level={level} />
             <span className="text-[11px] text-slate-400">
